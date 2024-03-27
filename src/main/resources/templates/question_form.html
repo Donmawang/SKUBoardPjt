@@ -1,0 +1,42 @@
+<html layout:decorate="~{layout}">
+<div layout:fragment="content" class="container">
+    <form id="questionForm">
+        <div class="mb-3">
+            <label for="title" class="form-label">제목</label>
+            <input type="text" id="title" name="title" class="form-control">
+        </div>
+        <div class="mb-3">
+            <label for="content" class="form-label">내용</label>
+            <textarea id="content" name="content" class="form-control" rows="10"></textarea>
+        </div>
+        <button type="button" id="submit" class="btn btn-primary my-2">저장하기</button>
+    </form>
+    <script>
+        document.getElementById('submit').addEventListener('click', function() {
+            var title = document.getElementById('title').value;
+            var content = document.getElementById('content').value;
+
+            var data = {
+                title: title,
+                content: content
+            };
+
+            fetch('/question/create', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+                .then(response => response.text())
+                .then(result => {
+                    alert(result);
+                    window.location.href = '/question/detail/' + savedQuestion.getId();
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                });
+        });
+    </script>
+</div>
+</html>

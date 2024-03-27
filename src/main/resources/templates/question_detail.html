@@ -1,0 +1,205 @@
+<html layout:decorate="~{layout}">
+<link rel="stylesheet" href="/style.css">
+<body>
+<div layout:fragment="content" class="container my-3">
+    <!-- 질문 -->
+    <h2 class="border-bottom py-2" th:text="${question.title}"></h2>
+    <p th:text="|작성자 : ${question.author.getUserId()}|"></p>
+    <div class="card my-3">
+        <div class="card-body">
+            <div class="card-text" style="white-space: pre-line;" th:text="${question.content}"></div>
+            <div class="d-flex justify-content-end">
+                <div th:if="${question.modifiedDateTime != null}"
+                     class="badge bg-light text-dark p-2 text-start mx-3">
+                    <div class="mb-2">수정됨</div>
+                    <div th:text="${#temporals.format(question.modifiedDateTime, 'yyyy-MM-dd HH:mm')}"></div>
+                </div>
+                <div th:if="${question.modifiedDateTime == null}"
+                     class="badge bg-light text-dark p-2 text-start">
+                    <div th:text="${#temporals.format(question.localDateTime, 'yyyy-MM-dd HH:mm')}"></div>
+                </div>
+            </div>
+            <div class="my-3">
+                <a th:href="@{|/question/modify/${question.id}|}" class="btn btn-sm btn-outline-secondary"
+                   sec:authorize="isAuthenticated()"
+                   th:if="${question.author != null and #authentication.getPrincipal().getUsername() == question.author.userId}"
+                   th:text="수정"></a>
+                <a href="javascript:void(0);" th:data-uri="@{|/question/delete/${question.id}|}"
+                   class="delete btn btn-sm btn-outline-secondary" sec:authorize="isAuthenticated()"
+                   th:if="${question.author != null and #authentication.getPrincipal().getUsername() == question.author.userId}"
+                   th:text="삭제"></a>
+            </div>
+        </div>
+    </div>
+    <!-- 답변의 갯수 표시 -->
+    <h5 class="border-bottom my-3 py-2"
+        th:text="|총 ${#lists.size(question.answerList)}개의 댓글이 있습니다.|"></h5>
+    <!-- 답변 반복 시작 -->
+    <div class="card my-3" th:each="answer : ${question.answerList}">
+        <div class="card-body">
+            <div class="d-flex justify-content-between">
+                <p>
+                    <span th:text="${answer.author.getUserId()}" style="font-weight: bolder"></span>
+                    <span th:if="${answer.author.userId == question.author.userId}"
+                          class="text-danger small">(글쓴이)</span>
+                </p>
+                <div class="badge bg-light text-dark p-2 text-start">
+                    <div th:text="${@timeUtil.timeAgo(answer.localDateTime)}"></div>
+                </div>
+            </div>
+            <div th:id="'answerContent-' + ${answer.id}" th:text="${answer.content}"></div>
+            <div class="my-3" th:id="'answer-' + ${answer.id}">
+                <div th:if="${#authentication.name == answer.author.userId}" th:id="'editForm-' + ${answer.id}"
+                     style="display: none;">
+                    <form class="updateForm" th:id="'answerForm-' + ${answer.id}">
+                        <textarea class="form-control" name="content" th:text="${answer.content}"></textarea>
+                        <button type="button" class="btn btn-sm btn-primary"
+                                th:onclick="'updateAnswer(' + ${answer.id} + ')'">저장
+                        </button>
+                        <button type="button" class="btn btn-sm btn-secondary"
+                                th:onclick="'cancelEdit(' + ${answer.id} + ')'">취소
+                        </button>
+                    </form>
+                </div>
+                <!-- 인증이 되었거나 인증되지 않아도 ''' -->
+                <div th:if="${#authorization.expression(
+                    'isAuthenticated() and #authentication.principal.username == ''' + answer.author.userId + '''')}">
+                    <button
+                            class="btn btn-sm btn-outline-secondary"
+                            th:onclick="'showEditForm(' + ${answer.id} + ')'"
+                            th:text="수정">
+                    </button>
+                    <button
+                            th:data-answer-id="${answer.id}"
+                            th:text="삭제"
+                            onclick="deleteAnswer(this)"
+                            class="btn btn-sm btn-outline-danger">
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 답변 반복 끝  -->
+    <!-- 답변 작성 -->
+    <form id="answerForm" th:object="${answerForm}" class="my-3" th:data-question-id="${question.id}">
+        <div th:replace="~{form_errors :: formErrorsFragment}"></div>
+        <textarea sec:authorize="isAnonymous()" th:field="*{content}" class="form-control"
+                  id="anonymousAnswer" rows="10" placeholder="로그인한 유저만 댓글 작성이 가능합니다." readonly></textarea>
+        <textarea sec:authorize="isAuthenticated()" th:field="*{content}" class="form-control" rows="10"></textarea>
+        <input type="button" value="댓글 등록" class="btn btn-primary my-2"
+               onclick="createAnswer(this.form.dataset.questionId)">
+    </form>
+</div>
+<script layout:fragment="script" type='text/javascript'>
+    document.addEventListener('DOMContentLoaded', function () {
+        const delete_elements = document.getElementsByClassName("delete");
+        Array.from(delete_elements).forEach(function (element) {
+            element.addEventListener('click', function () {
+                if (confirm("정말로 삭제하시겠습니까?")) {
+                    window.location.href = this.dataset.uri;
+                }
+                ;
+            });
+        });
+
+        const anonymousAnswer = document.getElementById("anonymousAnswer");
+        if (anonymousAnswer) {
+            anonymousAnswer.addEventListener('click', function () {
+                if (confirm('로그인하시겠습니까?')) {
+                    window.location.href = '/user/login';
+                }
+            });
+        }
+    });
+
+    function createAnswer(questionId) {
+        var form = document.getElementById('answerForm');
+        var formData = new FormData(form);
+
+        fetch('/answer/create/' + questionId, {
+            method: 'POST',
+            body: formData
+        })
+            .then(response => response.json())
+            .then(data => {
+                if (data.status === 200) {
+                    window.location.reload();
+                } else {
+                    alert(data.message);
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                alert("답변 등록 중 오류가 발생했습니다.");
+            });
+    }
+
+    function showEditForm(answerId) {
+        document.getElementById('answerContent-' + answerId).style.display = 'none';
+        document.getElementById('editForm-' + answerId).style.display = 'block';
+    }
+
+    function cancelEdit(answerId) {
+        document.getElementById('answerContent-' + answerId).style.display = 'block';
+        document.getElementById('editForm-' + answerId).style.display = 'none';
+    }
+
+    function updateAnswer(answerId) {
+        var form = document.getElementById('answerForm-' + answerId);
+        var formData = new FormData(form);
+        var url = '/answer/update/' + answerId;
+
+        fetch(url, {
+            method: 'PUT',
+            headers: {},
+            body: formData
+        })
+            .then(function (response) {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    response.text().then(function (errorMessage) {
+                        alert(errorMessage);
+                    });
+                }
+            })
+            .catch(function (error) {
+                console.error('Error:', error);
+                alert('답변 수정 중 에러가 발생하였습니다.');
+            });
+    }
+
+    function deleteAnswer(button) {
+        var answerId = button.getAttribute('data-answer-id');
+        var url = '/answer/delete/' + answerId;
+        var csrfToken = document.querySelector('meta[name="_csrf"]').getAttribute('content');
+        var csrfHeader = document.querySelector('meta[name="_csrf_header"]').getAttribute('content');
+
+        var confirmMessage = '정말로 삭제하시겠습니까?';
+
+        if (!confirm(confirmMessage)) {
+            return;
+        }
+
+        fetch(url, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                [csrfHeader]: csrfToken
+            }
+        })
+            .then(function (response) {
+                if (response.ok) {
+                    window.location.reload();
+                } else {
+                    alert('댓글 삭제에 실패하였습니다.');
+                }
+            })
+            .catch(function (error) {
+                console.error('Error:', error);
+                alert('댓글 삭제 중 에러가 발생하였습니다.');
+            });
+    }
+</script>
+</body>
+</html>
